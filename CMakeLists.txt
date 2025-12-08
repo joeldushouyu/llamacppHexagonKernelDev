@@ -24,6 +24,8 @@ add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../llama.cpp/ggml ${CMAKE_CURRENT_B
 add_library(hexagon_utils STATIC
     utils/errorMetrics.cpp
     utils/errorMetrics.hpp
+    utils/loadTensor.cpp
+    utils/loadTensor.hpp
 )
 
 # Include directories for utils library

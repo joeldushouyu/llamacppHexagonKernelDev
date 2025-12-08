@@ -103,7 +103,7 @@ adb shell "cd $DEVICE_DIR && \
     export GGML_HEXAGON_NDEV=$NDEV && \
     export GGML_HEXAGON_VERBOSE=$V && \
     export GGML_HEXAGON_PROFILE=$PROF && \
-    ./hexagon_test"
+    ./hexagon_test /data/local/tmp/gguf/mmproj-F16.gguf"
 EXIT_CODE=$?
 set -e
 
