@@ -78,8 +78,8 @@ echo ""
 
 # Read environment variables or use defaults
 NDEV=${NDEV:-1}
-V=${V:-0}
-PROF=${PROF:-0}
+V=${V:-1}
+PROF=${PROF:-1}
 
 echo "Configuration:"
 echo "  NDEV=$NDEV (number of Hexagon devices)"
@@ -115,7 +115,8 @@ echo ""
 echo "=== DSP/FARF Logs (from logcat) ==="
 # Display all FARF logs from DSP (adsprpc tag contains DSP-side logs)
 if [ -f /tmp/hexagon_logcat.txt ]; then
-    grep "adsprpc" /tmp/hexagon_logcat.txt || echo "No DSP logs found"
+    #grep  "adsprpc" /tmp/hexagon_logcat.txt || echo "No DSP logs found"
+    cat /tmp/hexagon_logcat.txt | grep "adsprpc" || echo "No DSP logs found"
 else
     echo "Logcat file not found"
 fi
