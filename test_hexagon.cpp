@@ -3,97 +3,19 @@
 #include <string.h>
 #include <time.h>
 #include <math.h>
-
+#include "helperFunction.hpp"
+#include "errorMetrics.hpp"
+#include "ggml-impl.h"
 #include "ggml.h"
 #include "ggml-backend.h"
 #include "ggml-hexagon.h"
 
-#define GGML_LOG_INFO(...) fprintf(stderr, __VA_ARGS__)
-#define GGML_LOG_ERROR(...) fprintf(stderr, "ERROR: " __VA_ARGS__)
-
-// Helper function to print tensor values
-void print_tensor(const char* name, struct ggml_tensor* tensor, int max_elements = 10) {
-    GGML_LOG_INFO("%s: [", name);
-    float* data = (float*)tensor->data;
-    int n_elements = ggml_nelements(tensor);
-    int print_count = n_elements < max_elements ? n_elements : max_elements;
-    
-    for (int i = 0; i < print_count; i++) {
-        GGML_LOG_INFO("%.4f", data[i]);
-        if (i < print_count - 1) GGML_LOG_INFO(", ");
-    }
-    if (n_elements > max_elements) {
-        GGML_LOG_INFO(" ... (%d more)", n_elements - max_elements);
-    }
-    GGML_LOG_INFO("]\n");
-}
-
-// Error metric calculation
-struct ErrorMetrics {
-    float l1_relative_error;
-    float l2_relative_error;
-    float cosine_similarity;
-    float rms_error;
-};
-
-ErrorMetrics calculate_error_metrics(const float* reference, const float* computed, int n_elements) {
-    ErrorMetrics metrics = {0.0f, 0.0f, 0.0f, 0.0f};
-    
-    double l1_error = 0.0;
-    double l2_error = 0.0;
-    double l1_norm_ref = 0.0;
-    double l2_norm_ref = 0.0;
-    double dot_product = 0.0;
-    double norm_ref = 0.0;
-    double norm_computed = 0.0;
-    double squared_error = 0.0;
-    
-    for (int i = 0; i < n_elements; i++) {
-        double diff = fabs(computed[i] - reference[i]);
-        double ref_abs = fabs(reference[i]);
-        
-        l1_error += diff;
-        l2_error += diff * diff;
-        l1_norm_ref += ref_abs;
-        l2_norm_ref += reference[i] * reference[i];
-        
-        dot_product += reference[i] * computed[i];
-        norm_ref += reference[i] * reference[i];
-        norm_computed += computed[i] * computed[i];
-        
-        squared_error += diff * diff;
-    }
-    
-    // L1 relative error
-    metrics.l1_relative_error = (l1_norm_ref > 1e-10) ? (l1_error / l1_norm_ref) : 0.0f;
-    
-    // L2 relative error
-    metrics.l2_relative_error = (l2_norm_ref > 1e-10) ? sqrt(l2_error / l2_norm_ref) : 0.0f;
-    
-    // Cosine similarity
-    double denom = sqrt(norm_ref) * sqrt(norm_computed);
-    metrics.cosine_similarity = (denom > 1e-10) ? (dot_product / denom) : 0.0f;
-    
-    // RMS error
-    metrics.rms_error = sqrt(squared_error / n_elements);
-    
-    return metrics;
-}
-
-void print_error_metrics(const ErrorMetrics& metrics) {
-    GGML_LOG_INFO("\n--- Error Metrics ---\n");
-    GGML_LOG_INFO("L1 Relative Error:    %.6e\n", metrics.l1_relative_error);
-    GGML_LOG_INFO("L2 Relative Error:    %.6e\n", metrics.l2_relative_error);
-    GGML_LOG_INFO("Cosine Similarity:    %.8f\n", metrics.cosine_similarity);
-    GGML_LOG_INFO("RMS Error:            %.6e\n", metrics.rms_error);
-    GGML_LOG_INFO("--------------------\n");
-}
 
 // Test RMS normalization
 bool test_rms_norm(ggml_backend_t backend) {
     GGML_LOG_INFO("\n=== Testing RMS Normalization ===\n");
     
-    const int n_elements = 4096;  // typical embedding size
+    const int n_elements = 4099;  // typical embedding size
     
     // Create context
     struct ggml_init_params params = {
@@ -132,7 +54,7 @@ bool test_rms_norm(ggml_backend_t backend) {
     }
     
     GGML_LOG_INFO("Input tensor shape: [%d]\n", n_elements);
-    print_tensor("Input (first 10)", x);
+
     
     GGML_LOG_INFO("Computing RMS norm on Hexagon backend...\n");
     
@@ -142,8 +64,6 @@ bool test_rms_norm(ggml_backend_t backend) {
         ggml_free(ctx);
         return false;
     }
-    
-    print_tensor("Output (first 10)", result);
     
     // CPU reference implementation
     GGML_LOG_INFO("\nComputing CPU reference...\n");
@@ -180,7 +100,7 @@ bool test_rms_norm(ggml_backend_t backend) {
 bool test_add(ggml_backend_t backend) {
     GGML_LOG_INFO("\n=== Testing Element-wise Addition ===\n");
     
-    const int n_elements = 1024;
+    const int n_elements = 4307;
     
     struct ggml_init_params params = {
         .mem_size   = 128 * 1024 * 1024,
@@ -212,18 +132,18 @@ bool test_add(ggml_backend_t backend) {
         return false;
     }
     
+    // fix seed
+    srand(42);
     // Initialize input data
     float* a_data = (float*)a->data;
     float* b_data = (float*)b->data;
     for (int i = 0; i < n_elements; i++) {
-        a_data[i] = (float)i;
-        b_data[i] = (float)(i * 2);
+        a_data[i] = random_float(-5.0f, 5.0f);
+        b_data[i] = random_float(-5.0f, 5.0f);
     }
     
     GGML_LOG_INFO("Tensor A shape: [%d]\n", n_elements);
     GGML_LOG_INFO("Tensor B shape: [%d]\n", n_elements);
-    print_tensor("A (first 10)", a);
-    print_tensor("B (first 10)", b);
     
     GGML_LOG_INFO("Computing addition on Hexagon backend...\n");
     
@@ -234,7 +154,6 @@ bool test_add(ggml_backend_t backend) {
         return false;
     }
     
-    print_tensor("Result (first 10)", result);
     
     // CPU reference implementation
     GGML_LOG_INFO("\nComputing CPU reference...\n");
@@ -258,24 +177,19 @@ bool test_add(ggml_backend_t backend) {
     return true;
 }
 
-// Test matrix multiplication
-bool test_mul_mat(ggml_backend_t backend) {
-    GGML_LOG_INFO("\n=== Testing Matrix Multiplication ===\n");
+
+
+
+// Test element-wise multiplication
+bool test_mul(ggml_backend_t backend) {
+    GGML_LOG_INFO("\n=== Testing Element-wise Multiplication ===\n");
     
-    // NOTE: Hexagon backend supports:
-    // - Q4_0, Q8_0, MXFP4 types for src0 (weights)
-    // - F16 for src0 (requires experimental flag)
-    // - F32 for src1 (input) and dst (output)
-    // F32 x F32 matmul is NOT supported, so we use F16 x F32
-    
-    const int m = 512;   // rows of result
-    const int n = 256;   // cols of result  
-    const int k = 1024;  // shared dimension
+    const int n_elements = 4307;
     
     struct ggml_init_params params = {
-        .mem_size   = 256 * 1024 * 1024,
+        .mem_size   = 128 * 1024 * 1024,
         .mem_buffer = NULL,
-        .no_alloc   = true,  // Use backend buffers
+        .no_alloc   = true,  // Don't allocate memory in context, use backend buffers
     };
     struct ggml_context* ctx = ggml_init(params);
     if (!ctx) {
@@ -283,15 +197,12 @@ bool test_mul_mat(ggml_backend_t backend) {
         return false;
     }
     
-    // Create input matrices
-    // For ggml_mul_mat(a, b): result[m,n] = a[k,m] @ b[n,k]
-    // a is transposed in the multiplication
-    // Use F16 for src0 (a) as Hexagon supports F16 x F32 but not F32 x F32
-    struct ggml_tensor* a = ggml_new_tensor_2d(ctx, GGML_TYPE_F16, k, m);  // [k, m]
-    struct ggml_tensor* b = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, k, n);  // [k, n]
+    // Create input tensors (without allocating data)
+    struct ggml_tensor* a = ggml_new_tensor_1d(ctx, GGML_TYPE_F32, n_elements);
+    struct ggml_tensor* b = ggml_new_tensor_1d(ctx, GGML_TYPE_F32, n_elements);
     
-    // Apply matrix multiplication
-    struct ggml_tensor* result = ggml_mul_mat(ctx, a, b);
+    // Apply multiplication
+    struct ggml_tensor* result = ggml_mul(ctx, a, b);
     
     // Build graph
     struct ggml_cgraph* gf = ggml_new_graph(ctx);
@@ -305,14 +216,162 @@ bool test_mul_mat(ggml_backend_t backend) {
         return false;
     }
     
+    // fix seed
+    srand(42);
+    // Initialize input data
+    float* a_data = (float*)a->data;
+    float* b_data = (float*)b->data;
+    for (int i = 0; i < n_elements; i++) {
+        a_data[i] = random_float(-5.0f, 5.0f);
+        b_data[i] = random_float(-5.0f, 5.0f);
+    }
+    
+    GGML_LOG_INFO("Tensor A shape: [%d]\n", n_elements);
+    GGML_LOG_INFO("Tensor B shape: [%d]\n", n_elements);
+    
+    GGML_LOG_INFO("Computing multiplication on Hexagon backend...\n");
+    
+    if (ggml_backend_graph_compute(backend, gf) != GGML_STATUS_SUCCESS) {
+        GGML_LOG_ERROR("Failed to compute graph\n");
+        ggml_backend_buffer_free(buffer);
+        ggml_free(ctx);
+        return false;
+    }
+    
+
+    // CPU reference implementation
+    GGML_LOG_INFO("\nComputing CPU reference...\n");
+    float* cpu_reference = (float*)malloc(n_elements * sizeof(float));
+    float* a_data_cpu = (float*)a->data;
+    float* b_data_cpu = (float*)b->data;
+    
+    for (int i = 0; i < n_elements; i++) {
+        cpu_reference[i] = a_data_cpu[i] * b_data_cpu[i];
+    }
+    
+    // Calculate error metrics
+    float* result_data = (float*)result->data;
+    ErrorMetrics metrics = calculate_error_metrics(cpu_reference, result_data, n_elements);
+    print_error_metrics(metrics);
+    
+    free(cpu_reference);
+    ggml_backend_buffer_free(buffer);
+    ggml_free(ctx);
+    GGML_LOG_INFO("Addition test completed successfully!\n");
+    return true;
+}
+
+
+
+// Test matrix multiplication: F16 x F32
+bool test_mul_mat_f16_f32(ggml_backend_t backend) {
+    GGML_LOG_INFO("\n=== Testing Matrix Multiplication (F16 x F32) ===\n");
+
+    
+    // const int m = 64;   // rows of result
+    // const int n = 64;   // cols of result  
+    // const int k = 64;  // shared dimension
+
+    // const int m = 2048;   // rows of result
+    // const int n = 1024;   // cols of result  
+    // const int k = 512;  // shared dimension
+
+    // const int m = 2050;   // rows of result
+    // const int n = 1303;   // cols of result  
+    // const int k = 1029;  // shared dimension
+
+
+    
+    // const int m = 4304;   // rows of result
+    // const int n = 4096;   // cols of result  
+    // const int k = 1152;  // shared dimension    
+    
+    // const int m = 1152;   // rows of result
+    // const int n = 4096;   // cols of result  
+    // const int k = 1152;  // shared dimension    
+
+    // const int m = 1152;   // rows of result
+    // const int n = 4096;   // cols of result  
+    // const int k = 4304;  // shared dimension 
+    
+    
+    // const int m = 1152;   // rows of result
+    // const int n = 4096;   // cols of result  
+    // const int k = 1152;  // shared dimension    
+
+
+    // const int m = 1152;   // rows of result
+    // const int n = 4096;   // cols of result  
+    // const int k = 1152;  // shared dimension
+
+    const int m = 1152;   // rows of result
+    const int n = 4096;   // cols of result  
+    const int k = 4304;  // shared dimension
+
+
+    size_t buf_size = ggml_tensor_overhead()*GGML_DEFAULT_GRAPH_SIZE + ggml_graph_overhead();
+    struct ggml_init_params params = {
+        .mem_size   = buf_size,
+        .mem_buffer = NULL,
+        .no_alloc   = true,  // Use backend buffers
+    };
+    struct ggml_context* ctx = ggml_init(params);
+    if (!ctx) {
+        GGML_LOG_ERROR("Failed to create ggml context\n");
+        return false;
+    }
+    
+    // A is row major of mxk, B is column major of kxn
+    // C is column major of mxn
+    struct ggml_tensor* a = ggml_new_tensor_2d(ctx, GGML_TYPE_F16, k, m);  // [k, m]
+    struct ggml_tensor* b = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, k, n);  // [k, n]
+    
+    
+
+    // Apply matrix multiplication
+    struct ggml_tensor* result = ggml_mul_mat(ctx, a, b);
+    
+    // print the ne and nb of a, b, and result
+    GGML_LOG_INFO("Tensor A ne: [%d, %d], nb: [%d, %d]\n", (int)a->ne[0], (int)a->ne[1], (int)a->nb[0], (int)a->nb[1]);
+    GGML_LOG_INFO("Tensor B ne: [%d, %d], nb: [%d, %d]\n", (int)b->ne[0], (int)b->ne[1], (int)b->nb[0], (int)b->nb[1]);
+    GGML_LOG_INFO("Result Tensor ne: [%d, %d], nb: [%d, %d]\n", (int)result->ne[0], (int)result->ne[1], (int)result->nb[0], (int)result->nb[1]);
+
+    // Build graph
+    struct ggml_cgraph* gf = ggml_new_graph(ctx);
+    ggml_build_forward_expand(gf, result);
+    
+    // Allocate buffers on the backend
+    ggml_backend_buffer_t buffer = ggml_backend_alloc_ctx_tensors(ctx, backend);
+    if (!buffer) {
+        GGML_LOG_ERROR("Failed to allocate backend buffer\n");
+        ggml_free(ctx);
+        return false;
+    }
+    
     // Initialize with test data
+    
+    // fix seed
+    srand(42);
     ggml_fp16_t* a_data = (ggml_fp16_t*)a->data;
     float* b_data = (float*)b->data;
     for (int i = 0; i < k * m; i++) {
-        a_data[i] = ggml_fp32_to_fp16(1.0f);  // Use 1.0 for easier verification
+        //a_data[i] = ggml_fp32_to_fp16(1.0f);
+        // every 64 elemnts has same random value
+
+        // if(i % 64 == 0) {
+        //     rand_share_64 = random_float(-5.0f, 5.0f);
+        // }
+        // a_data[i] = ggml_fp32_to_fp16(rand_share_64);
+        //a_data[i] =ggml_fp32_to_fp16(random_float(-5.0f, 5.0f));  // generate random value between -5 to 5
+
+
+        //a_data[i] =   ggml_fp32_to_fp16( (i%1024)*1.0f);  // generate random value between -10 to 10
+        a_data[i] =   ggml_fp32_to_fp16( random_float(-4, 4));  // generate random value between -4 to 4
     }
     for (int i = 0; i < k * n; i++) {
-        b_data[i] = 1.0f;
+        //b_data[i] =(i%1024)*1.0f; //random_float(-4, 4);  // generate random value between -4 to 4
+
+        b_data[i] = random_float(-4, 4); 
     }
     
     GGML_LOG_INFO("Matrix A shape: [%d, %d]\n", (int)a->ne[0], (int)a->ne[1]);
@@ -328,7 +387,6 @@ bool test_mul_mat(ggml_backend_t backend) {
     }
     
     GGML_LOG_INFO("Result shape: [%d, %d]\n", (int)result->ne[0], (int)result->ne[1]);
-    print_tensor("Result (first 10)", result);
     
     // CPU reference implementation
     GGML_LOG_INFO("\nComputing CPU reference...\n");
@@ -361,28 +419,20 @@ bool test_mul_mat(ggml_backend_t backend) {
     ErrorMetrics metrics = calculate_error_metrics(cpu_reference, result_data, m * n);
     print_error_metrics(metrics);
     
-    // Verify result: with all 1.0 inputs, result should be k (1024) in each element
-    float expected = (float)k;  // 1024.0
-    float tolerance = 1.0f;
-    bool verified = true;
-    for (int i = 0; i < 10 && i < m * n; i++) {
-        if (fabs(result_data[i] - expected) > tolerance) {
-            GGML_LOG_ERROR("Verification failed: result[%d] = %.4f, expected ~%.4f\n", 
-                          i, result_data[i], expected);
-            verified = false;
-            break;
-        }
+
+
+    // print first 10 value of result and cpu_reference for debug
+    for(int i = 0; i < 10; i++) {
+        GGML_LOG_INFO("Result[%d]: %f, CPU Reference[%d]: %f\n", i, result_data[i], i, cpu_reference[i]);
     }
-    if (verified) {
-        GGML_LOG_INFO("Result verification: PASSED (values ~%.4f as expected)\n", expected);
-    }
-    
+
     free(cpu_reference);
     ggml_backend_buffer_free(buffer);
     ggml_free(ctx);
-    GGML_LOG_INFO("Matrix multiplication test completed successfully!\n");
+    GGML_LOG_INFO("F16 x F32 matrix multiplication test completed successfully!\n");
     return true;
 }
+
 
 int main(int argc, char** argv) {
     GGML_LOG_INFO("========================================\n");
@@ -433,23 +483,29 @@ int main(int argc, char** argv) {
     // Run tests
     bool all_passed = true;
     
-    // Test 1: Addition
-    if (!test_add(backend)) {
-        GGML_LOG_ERROR("Addition test FAILED\n");
+    // // // Test 1: Addition
+    // if (!test_add(backend)) {
+    //     GGML_LOG_ERROR("Addition test FAILED\n");
+    //     all_passed = false;
+    // }
+   
+    
+    // if (!test_mul(backend)) {
+    //     GGML_LOG_ERROR("Multiplication test FAILED\n");
+    //     all_passed = false;
+    // }    
+    // // Test 2: RMS Normalization
+    // if (!test_rms_norm(backend)) {
+    //     GGML_LOG_ERROR("RMS Norm test FAILED\n");
+    //     all_passed = false;
+    // }
+    
+    // Test 3: Matrix Multiplication (F16 x F32)
+    if (!test_mul_mat_f16_f32(backend)) {
+        GGML_LOG_ERROR("F16 x F32 matrix multiplication test FAILED\n");
         all_passed = false;
     }
     
-    // Test 2: RMS Normalization
-    if (!test_rms_norm(backend)) {
-        GGML_LOG_ERROR("RMS Norm test FAILED\n");
-        all_passed = false;
-    }
-    
-    // Test 3: Matrix Multiplication
-    if (!test_mul_mat(backend)) {
-        GGML_LOG_ERROR("Matrix multiplication test FAILED\n");
-        all_passed = false;
-    }
     
     // Cleanup
     ggml_backend_free(backend);

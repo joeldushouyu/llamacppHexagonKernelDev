@@ -20,6 +20,24 @@ set(GGML_CURL OFF CACHE BOOL "" FORCE)
 # Add ggml subdirectory
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../llama.cpp/ggml ${CMAKE_CURRENT_BINARY_DIR}/ggml)
 
+# Add utils library
+add_library(hexagon_utils STATIC
+    utils/errorMetrics.cpp
+    utils/errorMetrics.hpp
+)
+
+# Include directories for utils library
+target_include_directories(hexagon_utils PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/utils
+    ${CMAKE_CURRENT_SOURCE_DIR}/../llama.cpp/ggml/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../llama.cpp/ggml/src
+)
+
+# Link ggml to utils library
+target_link_libraries(hexagon_utils PUBLIC
+    ggml
+)
+
 # Add executable
 add_executable(hexagon_test
     test_hexagon.cpp
@@ -29,12 +47,14 @@ add_executable(hexagon_test
 target_include_directories(hexagon_test PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../llama.cpp/ggml/include
     ${CMAKE_CURRENT_SOURCE_DIR}/../llama.cpp/ggml/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/utils
 )
 
-# Link libraries - ggml and ggml-hexagon are now CMake targets
+# Link libraries - ggml, ggml-hexagon, and hexagon_utils
 target_link_libraries(hexagon_test PRIVATE
     ggml
     ggml-hexagon
+    hexagon_utils
 )
 
 # Set output directory
