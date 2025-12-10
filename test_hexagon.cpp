@@ -509,10 +509,10 @@ bool test_mul_mat_f16_f32_with_input_A(ggml_backend_t backend, struct ggml_tenso
     GGML_LOG_INFO("Matrix A shape: [%d, %d]\n", (int)a_input->ne[0], (int)a_input->ne[1]);
     GGML_LOG_INFO("Matrix B shape: [%d, %d]\n", (int)b->ne[0], (int)b->ne[1]);
     
-    // print first 10 value of A for debug
-    for(int i = 0; i < 10; i++) {
-        GGML_LOG_INFO("A[%d]: %f\n", i, ggml_fp16_to_fp32(a_data[i]));
-    }
+    // // print first 10 value of A for debug
+    // for(int i = 0; i < 10; i++) {
+    //     GGML_LOG_INFO("A[%d]: %f\n", i, ggml_fp16_to_fp32(a_data[i]));
+    // }
 
 
     GGML_LOG_INFO("Computing matrix multiplication on Hexagon backend...\n");
@@ -559,10 +559,10 @@ bool test_mul_mat_f16_f32_with_input_A(ggml_backend_t backend, struct ggml_tenso
     
 
 
-    // print first 10 value of result and cpu_reference for debug
-    for(int i = 0; i < 10; i++) {
-        GGML_LOG_INFO("Result[%d]: %f, CPU Reference[%d]: %f\n", i, result_data[i], i, cpu_reference[i]);
-    }
+    // // print first 10 value of result and cpu_reference for debug
+    // for(int i = 0; i < 10; i++) {
+    //     GGML_LOG_INFO("Result[%d]: %f, CPU Reference[%d]: %f\n", i, result_data[i], i, cpu_reference[i]);
+    // }
 
     free(cpu_reference);
     ggml_backend_buffer_free(buffer);
@@ -574,92 +574,135 @@ bool test_mul_mat_f16_f32_with_input_A(ggml_backend_t backend, struct ggml_tenso
 
 
 
-// void test_load_ggml_file(const std::string &filename) {
-//     GGML_LOG_INFO("\n=== Loading GGUF File: %s ===\n", filename.c_str());
 
-//     struct gguf_context * gguf_metadata_ctx = nullptr; 
-//     struct ggml_context * ctx_gguf = nullptr; 
+// Test matrix multiplication: F16 x F32
+bool test_mul_mat_f16_f32_with_input_A_input_B(ggml_backend_t backend, struct ggml_tensor* a_input, struct ggml_tensor* b_input) {
+    GGML_LOG_INFO("\n=== Testing Matrix Multiplication (F16 x F32) ===\n");
 
-//     // Step 1: Load GGUF metadata without allocating tensor data
-//     struct gguf_init_params params = {
-//         .no_alloc = true,
-//         .ctx = &ctx_gguf
-//     };
-//     gguf_metadata_ctx = gguf_init_from_file(filename.c_str(), params);
+
+
+    size_t buf_size = ggml_tensor_overhead()*GGML_DEFAULT_GRAPH_SIZE + ggml_graph_overhead();
+    struct ggml_init_params params = {
+        .mem_size   = buf_size,
+        .mem_buffer = NULL,
+        .no_alloc   = true,  // Use backend buffers
+    };
+    struct ggml_context* ctx = ggml_init(params);
+    if (!ctx) {
+        GGML_LOG_ERROR("Failed to create ggml context\n");
+        return false;
+    }
     
-//     if (!gguf_metadata_ctx) {
-//         GGML_LOG_ERROR("Failed to load GGUF file: %s\n", filename.c_str());
-//         return;
-//     }
+    // A is row major of mxk, B is column major of kxn
+    // C is column major of mxn
+    // assert(a_input->ne[0] == k && a_input->ne[1] == m);
+    int k = a_input->ne[0];
+    int m = a_input->ne[1];
+    assert(a_input->type == GGML_TYPE_F16);
+
+    int n = b_input->ne[1];
+    assert(b_input->type == GGML_TYPE_F32);
+    // Apply matrix multiplication
+    struct ggml_tensor* result = ggml_mul_mat(ctx, a_input, b_input);
     
-//     GGML_LOG_INFO("GGUF file loaded successfully!\n");
+    // print the ne and nb of a, b, and result
+    GGML_LOG_INFO("Tensor A ne: [%d, %d], nb: [%d, %d]\n", (int)a_input->ne[0], (int)a_input->ne[1], (int)a_input->nb[0], (int)a_input->nb[1]);
+    GGML_LOG_INFO("Tensor B ne: [%d, %d], nb: [%d, %d]\n", (int)b_input->ne[0], (int)b_input->ne[1], (int)b_input->nb[0], (int)b_input->nb[1]);
+    GGML_LOG_INFO("Result Tensor ne: [%d, %d], nb: [%d, %d]\n", (int)result->ne[0], (int)result->ne[1], (int)result->nb[0], (int)result->nb[1]);
+
+    // Build graph
+    struct ggml_cgraph* gf = ggml_new_graph(ctx);
+    ggml_build_forward_expand(gf, result);
     
-//     // Step 2: Print general metadata
-//     int n_kv = gguf_get_n_kv(gguf_metadata_ctx);
-//     GGML_LOG_INFO("Number of key-value pairs: %d\n", n_kv);
+    // Allocate buffers on the backend
+    ggml_backend_buffer_t buffer = ggml_backend_alloc_ctx_tensors(ctx, backend);
+    if (!buffer) {
+        GGML_LOG_ERROR("Failed to allocate backend buffer\n");
+        ggml_free(ctx);
+        return false;
+    }
     
-//     // Print some key metadata (architecture, parameter count, etc.)
-//     for (int i = 0; i < n_kv; i++) {
-//         const char* key = gguf_get_key(gguf_metadata_ctx, i);
-//         enum gguf_type type = gguf_get_kv_type(gguf_metadata_ctx, i);
-        
-//         // Print important metadata
-//         if (type == GGUF_TYPE_STRING) {
-//             const char* value = gguf_get_val_str(gguf_metadata_ctx, i);
-//             GGML_LOG_INFO("  %s: %s\n", key, value);
-//         } else if (type == GGUF_TYPE_UINT32) {
-//             uint32_t value = gguf_get_val_u32(gguf_metadata_ctx, i);
-//             GGML_LOG_INFO("  %s: %u\n", key, value);
-//         } else if (type == GGUF_TYPE_FLOAT32) {
-//             float value = gguf_get_val_f32(gguf_metadata_ctx, i);
-//             GGML_LOG_INFO("  %s: %f\n", key, value);
-//         }
-//     }
+    // Initialize with test data
     
-//     // Step 3: Get tensor information
-//     int n_tensors = gguf_get_n_tensors(gguf_metadata_ctx);
-//     GGML_LOG_INFO("\nNumber of tensors: %d\n", n_tensors);
+    // fix seed
+    srand(42);
+    ggml_fp16_t* a_data = (ggml_fp16_t*)a_input->data;
+    float* b_data = (float*)b_input->data;
+
     
-//     // Print tensor details
-//     for (int i = 0; i < n_tensors; i++) {
-//         const char* tensor_name = gguf_get_tensor_name(gguf_metadata_ctx, i);
-//         struct ggml_tensor* tensor = ggml_get_tensor(ctx_gguf, tensor_name);
-        
-//         if (tensor) {
-//             GGML_LOG_INFO("\nTensor %d: %s\n", i, tensor_name);
-//             GGML_LOG_INFO("  Type: %s\n", ggml_type_name(tensor->type));
-//             GGML_LOG_INFO("  Dimensions: [%lld", tensor->ne[0]);
-//             for (int d = 1; d < GGML_MAX_DIMS && tensor->ne[d] > 1; d++) {
-//                 GGML_LOG_INFO(", %lld", tensor->ne[d]);
-//             }
-//             GGML_LOG_INFO("]\n");
-            
-//             // Calculate total elements
-//             size_t n_elements = 1;
-//             for (int d = 0; d < GGML_MAX_DIMS; d++) {
-//                 if (tensor->ne[d] > 1) n_elements *= tensor->ne[d];
-//                 else break;
-//             }
-//             GGML_LOG_INFO("  Total elements: %zu\n", n_elements);
-//             GGML_LOG_INFO("  Size: %zu bytes\n", ggml_nbytes(tensor));
-//         }
-//     }
+
+    // {
+
+
+    //         for (int i = 0; i < k * n; i++) {
+    //         //b_data[i] =(i%1024)*1.0f; //random_float(-4, 4);  // generate random value between -4 to 4
+
+    //         b_data[i] = random_float(-0.170044, 10.63); 
+    //     }
+    // }
+
+    GGML_LOG_INFO("Matrix A shape: [%d, %d]\n", (int)a_input->ne[0], (int)a_input->ne[1]);
+    GGML_LOG_INFO("Matrix B shape: [%d, %d]\n", (int)b_input->ne[0], (int)b_input->ne[1]);
+
+
+    GGML_LOG_INFO("Computing matrix multiplication on Hexagon backend...\n");
     
-//     // Step 4: To actually load tensor data, you need to allocate buffers
-//     // Option A: Allocate on backend (Hexagon)
-//     // ggml_backend_t backend = ...; // your backend
-//     // ggml_backend_buffer_t buffer = ggml_backend_alloc_ctx_tensors(ctx_gguf, backend);
+    if (ggml_backend_graph_compute(backend, gf) != GGML_STATUS_SUCCESS) {
+        GGML_LOG_ERROR("Failed to compute graph\n");
+        ggml_backend_buffer_free(buffer);
+        ggml_free(ctx);
+        return false;
+    }
     
-//     // Option B: Allocate on CPU
-//     // You would need to re-initialize with no_alloc = false or manually allocate
+    GGML_LOG_INFO("Result shape: [%d, %d]\n", (int)result->ne[0], (int)result->ne[1]);
     
-//     // For now, we're just inspecting metadata
-//     GGML_LOG_INFO("\n=== GGUF File Inspection Complete ===\n");
+    // CPU reference implementation
+    GGML_LOG_INFO("\nComputing CPU reference...\n");
+    float* cpu_reference = (float*)malloc(m * n * sizeof(float));
+    ggml_fp16_t* a_data_cpu = (ggml_fp16_t*)a_input->data;
+    float* b_data_cpu = (float*)b_input->data;
     
-//     // Cleanup
-//     gguf_free(gguf_metadata_ctx);
-//     ggml_free(ctx_gguf);
-// }
+    // Matrix multiplication: C[m,n] = A[k,m]^T @ B[k,n]
+    // For each output element C[i,j], compute dot product of A[:,i] with B[:,j]
+    for (int i = 0; i < m; i++) {
+        for (int j = 0; j < n; j++) {
+            float sum = 0.0f;
+            for (int p = 0; p < k; p++) {
+                // A is stored column-major: A[k,m] means k rows, m columns
+                // Element at row p, column i is at index: i*k + p
+                float a_val = ggml_fp16_to_fp32(a_data_cpu[i * k + p]);
+                // B is stored column-major: B[k,n] means k rows, n columns  
+                // Element at row p, column j is at index: j*k + p
+                float b_val = b_data_cpu[j * k + p];
+                sum += a_val * b_val;
+            }
+            // Result is stored column-major: result[m,n]
+            // Element at row i, column j is at index: j*m + i
+            cpu_reference[j * m + i] = sum;
+        }
+    }
+    
+    // Calculate error metrics
+    float* result_data = (float*)result->data;
+    ErrorMetrics metrics = calculate_error_metrics(cpu_reference, result_data, m * n);
+    print_error_metrics(metrics);
+    
+
+
+    // // print first 10 value of result and cpu_reference for debug
+    // for(int i = 0; i < 10; i++) {
+    //     GGML_LOG_INFO("Result[%d]: %f, CPU Reference[%d]: %f\n", i, result_data[i], i, cpu_reference[i]);
+    // }
+
+    free(cpu_reference);
+    ggml_backend_buffer_free(buffer);
+    ggml_free(ctx);
+    GGML_LOG_INFO("F16 x F32 matrix multiplication test completed successfully!\n");
+    return true;
+
+}
+
+
 
 
 
@@ -762,16 +805,115 @@ int main(int argc, char** argv) {
         // }
         // release the gguf context and ggml context and buffer
 
-        if (!test_mul_mat_f16_f32_with_input_A(backend, tensor_map["v.blk.0.ffn_down.weight"])) {
+        // if (!test_mul_mat_f16_f32_with_input_A(backend, tensor_map["v.blk.0.ffn_down.weight"])) {
     
+        //     all_passed = false;
+        // }        
+
+        // for debug, load /local/tmp/llama.cpp/debug_src0.bin and compare with v.blk.0.ffn_down.weight
+        GGML_LOG_INFO("\n=== Loading debug binary and comparing with v.blk.0.ffn_down.weight ===\n");
+        
+        struct ggml_tensor* weight_tensor = tensor_map["v.blk.0.ffn_down.weight"];
+        
+        // Create a separate context for debug tensor since buffer is already allocated
+        size_t debug_buf_size = ggml_tensor_overhead() * 10;
+        struct ggml_init_params debug_params = {
+            .mem_size   = debug_buf_size,
+            .mem_buffer = NULL,
+            .no_alloc   = true,
+        };
+        struct ggml_context* debug_ctx = ggml_init(debug_params);
+        
+        if (!debug_ctx) {
+            GGML_LOG_ERROR("Failed to create debug context\n");
             all_passed = false;
-        }        
+        } else {
+
+            // Load binary file using the debug buffer
+            int ne_weight[GGML_MAX_DIMS] = {4304, 1152, 1, 1};
+            int nb_weight[GGML_MAX_DIMS] = {2, 8608, 9916416, 9916416};
+
+            int ne_xb[GGML_MAX_DIMS] = {4304, 4096, 1, 1};
+            int nb_xb[GGML_MAX_DIMS] = {4, 17216, 70516736, 70516736};
+
+            struct ggml_tensor* debug_weight_tensor = ggml_new_tensor_2d(debug_ctx, GGML_TYPE_F16, 
+                                                                          ne_weight[0], 
+                                                                          ne_weight[1]);
+            struct ggml_tensor* debug_xb_tensor = ggml_new_tensor_2d(debug_ctx, GGML_TYPE_F32, 
+                                                                          ne_xb[0], 
+                                                                          ne_xb[1]);
+            
+            // Allocate a separate buffer for the debug tensor
+            ggml_backend_buffer_t debug_buffer = ggml_backend_alloc_ctx_tensors(debug_ctx, backend);
+            
+            if (!debug_buffer) {
+                GGML_LOG_ERROR("Failed to allocate debug buffer\n");
+                all_passed = false;
+            } else {
+
+                
+                bool load_weight_bin = load_tensor_from_bin_file(
+                    "/data/local/tmp/llama.cpp/debug_mm_sr0.bin", 
+                    backend,
+                    debug_buffer,
+                    "debug_mm_sr0",
+                    ne_weight, 
+                    nb_weight, 
+                    GGML_TYPE_F16,
+                    debug_weight_tensor
+                );
+                load_weight_bin &= load_tensor_from_bin_file(
+                    "/data/local/tmp/llama.cpp/debug_mm_src1.bin", 
+                    backend,
+                    debug_buffer,
+                    "debug_mm_src1",
+                    ne_xb, 
+                    nb_xb, 
+                    GGML_TYPE_F32,
+                    debug_xb_tensor
+                );
+                // check to see if there are nan or inf in the xb tensor
+                float* xb_data = (float*)debug_xb_tensor->data;
+                size_t n_elements_xb = ne_xb[0] * ne_xb[1];
+                bool has_nan_inf = false;
+                float min_value = 0;
+                float max_value = 0;
+                for (size_t i = 0; i < n_elements_xb; i++) {
+                    if (isnan(xb_data[i]) || isinf(xb_data[i])) {
+                        GGML_LOG_ERROR("debug_xb_tensor has nan or inf at index %zu: %f\n", i, xb_data[i]);
+                        has_nan_inf = true;
+                        break;
+                    }
+                    if (xb_data[i] < min_value) {
+                        min_value = xb_data[i];
+                    }
+                    if (xb_data[i] > max_value) {
+                        max_value = xb_data[i];
+                    }
+                }
+                if (has_nan_inf) {
+                    all_passed = false;
+                }
+                GGML_LOG_INFO("debug_xb_tensor min value: %f, max value: %f\n", min_value, max_value);
+                
+                if (load_weight_bin) {
+                    GGML_LOG_INFO("Debug binary loaded successfully\n");
+                    
+                    test_mul_mat_f16_f32_with_input_A_input_B(backend, debug_weight_tensor, debug_xb_tensor);
+                } else {
+                    GGML_LOG_ERROR("Failed to load debug binary file\n");
+                    all_passed = false;
+                }
 
 
-        if (!test_mul_mat_f16_f32_with_input_A(backend, tensor_map["v.blk.0.ffn_up.weight"])) {
-    
-            all_passed = false;
-        }        
+                
+                ggml_backend_buffer_free(debug_buffer);
+            }
+            ggml_free(debug_ctx);
+        }
+
+
+
         ggml_backend_buffer_free(buffer);
         gguf_free(gguf_ctx);
         ggml_free(ctx_gguf);

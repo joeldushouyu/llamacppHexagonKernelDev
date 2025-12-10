@@ -22,3 +22,15 @@ bool  load_gguf_with_data(
     ggml_backend_buffer_t &buffer,
     std::unordered_map<std::string, struct ggml_tensor*> &tensor_map
 );
+
+bool load_tensor_from_bin_file(
+    const std::string &filename,
+    ggml_backend_t backend,
+    ggml_backend_buffer_t buffer,
+    const std::string &tensor_name,
+    const int ne[GGML_MAX_DIMS],
+    const int nb[GGML_MAX_DIMS],
+    enum ggml_type type,
+    //Note: caller responsible to release this buffer
+    struct ggml_tensor* tensor
+);
