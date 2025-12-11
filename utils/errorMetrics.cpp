@@ -14,6 +14,12 @@ ErrorMetrics calculate_error_metrics(const float* reference, const float* comput
     double norm_computed = 0.0;
     double squared_error = 0.0;
     
+    double max_absolute_error_corresponding_ref_value = 0.0;
+    double max_absolute_error_corresponding_computed_value = 0.0;
+    double max_abs_diff = 0.0;
+
+
+
     for (int i = 0; i < n_elements; i++) {
         double diff = fabs(computed[i] - reference[i]);
         double ref_abs = fabs(reference[i]);
@@ -28,6 +34,13 @@ ErrorMetrics calculate_error_metrics(const float* reference, const float* comput
         norm_computed += computed[i] * computed[i];
         
         squared_error += diff * diff;
+
+
+        if (diff > max_abs_diff) {
+            max_abs_diff = diff;
+            max_absolute_error_corresponding_ref_value =  reference[i];
+            max_absolute_error_corresponding_computed_value = computed[i];
+        }
     }
     
     // L1 relative error
@@ -42,6 +55,9 @@ ErrorMetrics calculate_error_metrics(const float* reference, const float* comput
     
     // RMS error
     metrics.rms_error = sqrt(squared_error / n_elements);
+
+    metrics.max_absolute_error_corresponding_ref_value =max_absolute_error_corresponding_ref_value;
+    metrics.max_absolute_error_corresponding_computed_value = max_absolute_error_corresponding_computed_value;
     
     return metrics;
 }
@@ -52,5 +68,8 @@ void print_error_metrics(const ErrorMetrics& metrics) {
     GGML_LOG_INFO("L2 Relative Error:    %.6f\n", metrics.l2_relative_error);
     GGML_LOG_INFO("Cosine Similarity:    %.8f\n", metrics.cosine_similarity);
     GGML_LOG_INFO("RMS Error:            %.6e\n", metrics.rms_error);
+    GGML_LOG_INFO("Max Absolute Error Corresponding Ref Value:    %.6f\n", metrics.max_absolute_error_corresponding_ref_value);
+    GGML_LOG_INFO("Max Absolute Error Corresponding Computed Value:    %.6f\n", metrics.max_absolute_error_corresponding_computed_value);
+    GGML_LOG_INFO("Difference between them:    %.6f\n", fabs(metrics.max_absolute_error_corresponding_ref_value - metrics.max_absolute_error_corresponding_computed_value));
     GGML_LOG_INFO("--------------------\n");
 }

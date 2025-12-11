@@ -21,13 +21,7 @@ set(GGML_CURL OFF CACHE BOOL "" FORCE)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../llama.cpp/ggml ${CMAKE_CURRENT_BINARY_DIR}/ggml)
 
 # Add utils library
-add_library(hexagon_utils STATIC
-    utils/errorMetrics.cpp
-    utils/errorMetrics.hpp
-    utils/loadTensor.cpp
-    utils/loadTensor.hpp
-)
-
+add_subdirectory(utils)
 # Include directories for utils library
 target_include_directories(hexagon_utils PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/utils

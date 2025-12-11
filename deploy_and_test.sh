@@ -90,13 +90,13 @@ echo ""
 # Clear logcat
 adb logcat -c
 
-# Start logcat in background to capture DSP FARF logs
-adb logcat -v threadtime > /tmp/hexagon_logcat.txt &
-LOGCAT_PID=$!
-sleep 1
+# Increase logcat buffer size to 16MB to prevent overwriting during the test
+adb shell logcat -G 16M
 
 echo "Running test..."
 set +e # Allow test to fail without exiting script
+
+# Run the test
 adb shell "cd $DEVICE_DIR && \
     export LD_LIBRARY_PATH=$DEVICE_DIR/lib:\$LD_LIBRARY_PATH && \
     export ADSP_LIBRARY_PATH=$DEVICE_DIR/lib && \
@@ -105,18 +105,21 @@ adb shell "cd $DEVICE_DIR && \
     export GGML_HEXAGON_PROFILE=$PROF && \
     ./hexagon_test /data/local/tmp/gguf/mmproj-F16.gguf"
 EXIT_CODE=$?
+
 set -e
 
-# Stop logcat
-kill $LOGCAT_PID 2>/dev/null
-wait $LOGCAT_PID 2>/dev/null || true
+echo ""
+echo "Capturing logs..."
+# Dump the log buffer (-d) to file. This ensures we get all logs that occurred
+# during the test, without race conditions.
+adb logcat -d -v threadtime > /tmp/hexagon_logcat.txt
 
 echo ""
 echo "=== DSP/FARF Logs (from logcat) ==="
 # Display all FARF logs from DSP (adsprpc tag contains DSP-side logs)
 if [ -f /tmp/hexagon_logcat.txt ]; then
-    #grep  "adsprpc" /tmp/hexagon_logcat.txt || echo "No DSP logs found"
-    cat /tmp/hexagon_logcat.txt | grep "adsprpc" || echo "No DSP logs found"
+    # Filter for adsprpc tags to see DSP messages
+    cat /tmp/hexagon_logcat.txt | grep "adsprpc" || echo "No DSP logs found in capture"
 else
     echo "Logcat file not found"
 fi
