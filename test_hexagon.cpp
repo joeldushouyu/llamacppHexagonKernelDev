@@ -194,7 +194,6 @@ bool test_silu(ggml_backend_t backend){
 bool test_gelu(ggml_backend_t backend, std::string output_csv_filename) {
     GGML_LOG_INFO("\n=== Testing GELU activation function ===\n");
 
-
     float input_range[2] = { -100.0f, 100.0f };
 
     struct ggml_init_params params = {
@@ -208,13 +207,13 @@ bool test_gelu(ggml_backend_t backend, std::string output_csv_filename) {
         return false;
     }
 
-    // //Create input tensor (without allocating data)
-    // //Create input tensor (without allocating data)
-    // const int n_elements = 4096*4096;    
-    // struct ggml_tensor* x = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, n_elements/4096, 4096);
+    //Create input tensor (without allocating data)
+    //Create input tensor (without allocating data)
+    const int n_elements = 4096*4096;    
+    struct ggml_tensor* x = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, n_elements/4096, 4096);
 
-    const int n_elements = 4096;    
-    struct ggml_tensor* x = ggml_new_tensor_1d(ctx, GGML_TYPE_F32, n_elements);
+    // const int n_elements = 4096;    
+    // struct ggml_tensor* x = ggml_new_tensor_1d(ctx, GGML_TYPE_F32, n_elements);
 
 
 
@@ -993,15 +992,15 @@ int main(int argc, char** argv) {
     //     all_passed = false;
     // }
     
-    if(!test_gelu(backend, "gelu_approx.csv")) {
-        GGML_LOG_ERROR("GELU test FAILED\n");
-        all_passed = false;
-    }
-
-    // if(!test_gelu(backend, "")) {
+    // if(!test_gelu(backend, "gelu_approx.csv")) {
     //     GGML_LOG_ERROR("GELU test FAILED\n");
     //     all_passed = false;
     // }
+
+    if(!test_gelu(backend, "")) {
+        GGML_LOG_ERROR("GELU test FAILED\n");
+        all_passed = false;
+    }
 
     // // Test 4: Load GGUF file (if provided as argument)
     // if (argc > 1) {
